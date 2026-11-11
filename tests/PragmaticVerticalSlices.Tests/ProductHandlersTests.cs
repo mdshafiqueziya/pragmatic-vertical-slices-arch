@@ -1,7 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using Microsoft.EntityFrameworkCore;
-using PragmaticVerticalSlices.Api.Features.Products;
-using PragmaticVerticalSlices.Api.Infrastructure.Persistence;
 
 namespace PragmaticVerticalSlices.Tests;
 

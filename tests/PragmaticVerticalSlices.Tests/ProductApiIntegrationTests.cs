@@ -1,17 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Storage;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Microsoft.AspNetCore.TestHost;
-using Npgsql;
-using PragmaticVerticalSlices.Api.Features.Products;
-using PragmaticVerticalSlices.Api.Infrastructure.Persistence;
 
 namespace PragmaticVerticalSlices.Tests;
 
@@ -19,69 +8,18 @@ public sealed class ProductApiIntegrationTests : IAsyncLifetime
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
+    private readonly InMemoryDatabaseRoot _databaseRoot = new();
+    private readonly string _databaseName = $"products-tests-{Guid.NewGuid():N}";
     private ProductApiFactory? _factory;
-    private string? _schemaName;
-    private string? _schemaConnectionString;
 
-    public async Task InitializeAsync()
+    public Task InitializeAsync()
     {
-        var baseConnectionString = Environment.GetEnvironmentVariable(
-            "ConnectionStrings__DefaultConnection");
-        if (string.IsNullOrWhiteSpace(baseConnectionString))
-        {
-            throw new InvalidOperationException(
-                "Set ConnectionStrings__DefaultConnection to a PostgreSQL test database before running integration tests.");
-        }
-
-        _schemaName = $"product_tests_{Guid.NewGuid():N}";
-        await using (var connection = new NpgsqlConnection(baseConnectionString))
-        {
-            await connection.OpenAsync();
-            await using var command = connection.CreateCommand();
-            command.CommandText = $"CREATE SCHEMA \"{_schemaName}\"";
-            await command.ExecuteNonQueryAsync();
-        }
-
-        var connectionBuilder = new NpgsqlConnectionStringBuilder(baseConnectionString)
-        {
-            SearchPath = _schemaName
-        };
-        _schemaConnectionString = connectionBuilder.ConnectionString;
-        _factory = CreateFactory(_schemaConnectionString, _schemaName!);
-
-        await using var scope = _factory.Services.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        await dbContext.Database.GetService<IRelationalDatabaseCreator>().CreateTablesAsync();
-
-        await using var schemaConnection = new NpgsqlConnection(_schemaConnectionString);
-        await schemaConnection.OpenAsync();
-        await using var schemaCommand = schemaConnection.CreateCommand();
-        schemaCommand.CommandText = "SELECT current_schema()";
-        Assert.Equal(_schemaName, await schemaCommand.ExecuteScalarAsync());
+        _factory = CreateFactory();
+        return Task.CompletedTask;
     }
 
-    public async Task DisposeAsync()
-    {
-        if (_factory is not null)
-        {
-            await _factory.DisposeAsync();
-        }
-
-        if (_schemaName is null)
-        {
-            return;
-        }
-
-        var baseConnectionString = Environment.GetEnvironmentVariable(
-            "ConnectionStrings__DefaultConnection")
-            ?? throw new InvalidOperationException(
-                "ConnectionStrings__DefaultConnection was removed before test cleanup.");
-        await using var connection = new NpgsqlConnection(baseConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"DROP SCHEMA \"{_schemaName}\" CASCADE";
-        await command.ExecuteNonQueryAsync();
-    }
+    public async Task DisposeAsync() =>
+        await _factory!.DisposeAsync();
 
     [Fact]
     public async Task ProductApi_ValidatesPerformsCrudPaginatesAndPersistsAcrossHostRestart()
@@ -166,7 +104,7 @@ public sealed class ProductApiIntegrationTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.NotFound, missingDelete.StatusCode);
 
         await _factory.DisposeAsync();
-        _factory = CreateFactory(_schemaConnectionString!, _schemaName!);
+        _factory = CreateFactory();
         var restartedClient = _factory.CreateClient();
         var persistedProduct = await restartedClient.GetFromJsonAsync<ProductResponse>(
             $"/api/products/{widget.Id}",
@@ -174,10 +112,12 @@ public sealed class ProductApiIntegrationTests : IAsyncLifetime
         Assert.Equal("Updated widget", persistedProduct?.Name);
     }
 
-    private static ProductApiFactory CreateFactory(string connectionString, string schemaName) =>
-        new(connectionString, schemaName);
+    private ProductApiFactory CreateFactory() =>
+        new(_databaseName, _databaseRoot);
 
-    private sealed class ProductApiFactory(string connectionString, string schemaName)
+    private sealed class ProductApiFactory(
+        string databaseName,
+        InMemoryDatabaseRoot databaseRoot)
         : WebApplicationFactory<Program>
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -186,38 +126,10 @@ public sealed class ProductApiIntegrationTests : IAsyncLifetime
             {
                 services.RemoveAll<AppDbContext>();
                 services.RemoveAll<DbContextOptions<AppDbContext>>();
+                services.RemoveAll<IDbContextOptionsConfiguration<AppDbContext>>();
                 services.AddDbContext<AppDbContext>(options =>
-                    options.UseNpgsql(connectionString)
-                        .UseSnakeCaseNamingConvention()
-                        .ReplaceService<IModelCacheKeyFactory, TestModelCacheKeyFactory>());
-                services.RemoveAll<AppDbContext>();
-                services.AddScoped<AppDbContext>(serviceProvider => new TestAppDbContext(
-                    serviceProvider.GetRequiredService<DbContextOptions<AppDbContext>>(),
-                    schemaName));
+                    options.UseInMemoryDatabase(databaseName, databaseRoot));
             });
         }
     }
-
-    private sealed class TestAppDbContext(
-        DbContextOptions<AppDbContext> options,
-        string schemaName) : AppDbContext(options)
-    {
-        public string SchemaName { get; } = schemaName;
-
-        protected override string ModelSchemaName => SchemaName;
-    }
-
-    private sealed class TestModelCacheKeyFactory : IModelCacheKeyFactory
-    {
-        public object Create(DbContext context, bool designTime) =>
-            new TestModelCacheKey(
-                context.GetType(),
-                (context as TestAppDbContext)?.SchemaName,
-                designTime);
-    }
-
-    private readonly record struct TestModelCacheKey(
-        Type ContextType,
-        string? SchemaName,
-        bool DesignTime);
 }

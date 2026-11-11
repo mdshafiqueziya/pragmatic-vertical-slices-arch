@@ -11,14 +11,14 @@ The .NET solution contains an ASP.NET Core Minimal API in `src/PragmaticVertical
 
 ## Build and test
 
-Run from the repository root after setting up PostgreSQL as described below:
+Run from the repository root:
 
 ```bash
 dotnet build PragmaticVerticalSlices.slnx
 dotnet test PragmaticVerticalSlices.slnx
 ```
 
-The integration test creates a unique schema in the configured PostgreSQL database and drops that schema after the test. The configured database user must be allowed to create and drop schemas.
+The API tests use EF Core's InMemory provider, so they do not need PostgreSQL. The API itself still requires PostgreSQL when run.
 
 ## Local PostgreSQL workflow
 
@@ -36,7 +36,7 @@ Set the connection string in the environment. These credentials are for local de
 export ConnectionStrings__DefaultConnection='Host=localhost;Port=5432;Database=products;Username=products;Password=products-local-only'
 ```
 
-For an already-running local PostgreSQL service, set the same environment variable to that database's connection string instead. The integration tests use this connection and create their own temporary schema.
+For an already-running local PostgreSQL service, set the same environment variable to that database's connection string instead.
 
 Create the `products_schema` schema and required tables manually before running the API. The application does not apply database migrations automatically.
 
