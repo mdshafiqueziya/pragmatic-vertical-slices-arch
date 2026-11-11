@@ -1,0 +1,35 @@
+
+name: .NET Build App
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore PragmaticVerticalSlices.slnx
+
+      - name: Build solution
+        run: dotnet build PragmaticVerticalSlices.slnx --configuration Release --no-restore
+
+      - name: Run unit tests
+        run: dotnet test PragmaticVerticalSlices.slnx --configuration Release --no-build

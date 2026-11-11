@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/PragmaticVerticalSlices.Api/PragmaticVerticalSlices.Api.csproj" />
+  <Project Path="tests/PragmaticVerticalSlices.Tests/PragmaticVerticalSlices.Tests.csproj" />
+</Solution>

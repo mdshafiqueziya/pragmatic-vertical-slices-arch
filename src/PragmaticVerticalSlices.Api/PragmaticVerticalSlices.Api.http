@@ -1,0 +1,53 @@
+@PragmaticVerticalSlices.Api_HostAddress = http://localhost:5268
+
+### Create products
+
+# @name createProduct
+POST {{PragmaticVerticalSlices.Api_HostAddress}}/api/products
+Accept: application/json
+Content-Type: application/json
+
+[
+  {
+    "name": "Widget",
+    "description": "A useful widget",
+    "price": 12.50
+  },
+  {
+    "name": "Gadget",
+    "description": "A useful gadget",
+    "price": 24.00
+  }
+]
+
+###
+
+@productId = {{createProduct.response.body.$[0].id}}
+
+### Get a product
+
+GET {{PragmaticVerticalSlices.Api_HostAddress}}/api/products/{{productId}}
+Accept: application/json
+
+### List products
+
+GET {{PragmaticVerticalSlices.Api_HostAddress}}/api/products?page=1&pageSize=20
+Accept: application/json
+
+### Update a product
+
+PUT {{PragmaticVerticalSlices.Api_HostAddress}}/api/products/{{productId}}
+Accept: application/json
+Content-Type: application/json
+
+{
+  "name": "Updated widget",
+  "description": "An updated useful widget",
+  "price": 15.00
+}
+
+### Delete a product
+
+DELETE {{PragmaticVerticalSlices.Api_HostAddress}}/api/products/{{productId}}
+
+###
